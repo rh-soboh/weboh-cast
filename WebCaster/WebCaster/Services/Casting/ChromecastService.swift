@@ -69,8 +69,10 @@ final class ChromecastService: NSObject {
         // Extract TXT record metadata
         var modelName: String?
         if case .bonjour(let txtRecord) = result.metadata {
-            if let mdData = txtRecord.getEntry(for: "md") {
-                modelName = String(data: mdData, encoding: .utf8)
+            let entry = txtRecord.getEntry(for: "md")
+            if let entry = entry {
+                let data = Data(entry)
+                modelName = String(data: data, encoding: .utf8)
             }
         }
 
