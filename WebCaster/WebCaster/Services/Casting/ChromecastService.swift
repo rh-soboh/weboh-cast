@@ -66,15 +66,7 @@ final class ChromecastService: NSObject {
             name = "Chromecast"
         }
 
-        // Extract TXT record metadata
-        var modelName: String?
-        if case .bonjour(let txtRecord) = result.metadata {
-            let entry = txtRecord.getEntry(for: "md")
-            if let entry = entry {
-                let data = Data(entry)
-                modelName = String(data: data, encoding: .utf8)
-            }
-        }
+        let modelName: String? = nil
 
         // Resolve to get host/port
         let connection = NWConnection(to: result.endpoint, using: .tcp)
