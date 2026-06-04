@@ -31,31 +31,33 @@ enum AppTab: String, CaseIterable {
 struct ContentView: View {
     @State private var selectedTab: AppTab = .browser
     @ObservedObject private var settings = AppSettings.shared
+    @StateObject private var sharedPlayerVM = PlayerViewModel()
+    @StateObject private var sharedCastingVM = CastingViewModel()
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            BrowserView()
+            BrowserView(playerVM: sharedPlayerVM, castingVM: sharedCastingVM)
                 .tabItem {
                     Label(AppTab.browser.rawValue,
                           systemImage: selectedTab == .browser ? AppTab.browser.selectedIcon : AppTab.browser.icon)
                 }
                 .tag(AppTab.browser)
 
-            HistoryView()
+            HistoryView(switchToBrowser: switchToBrowser)
                 .tabItem {
                     Label(AppTab.history.rawValue,
                           systemImage: selectedTab == .history ? AppTab.history.selectedIcon : AppTab.history.icon)
                 }
                 .tag(AppTab.history)
 
-            BookmarksView()
+            BookmarksView(switchToBrowser: switchToBrowser)
                 .tabItem {
                     Label(AppTab.bookmarks.rawValue,
                           systemImage: selectedTab == .bookmarks ? AppTab.bookmarks.selectedIcon : AppTab.bookmarks.icon)
                 }
                 .tag(AppTab.bookmarks)
 
-            QueueView()
+            QueueView(playerVM: sharedPlayerVM)
                 .tabItem {
                     Label(AppTab.queue.rawValue,
                           systemImage: selectedTab == .queue ? AppTab.queue.selectedIcon : AppTab.queue.icon)
@@ -74,6 +76,10 @@ struct ContentView: View {
         .onAppear {
             configureTabBarAppearance()
         }
+    }
+
+    private func switchToBrowser() {
+        selectedTab = .browser
     }
 
     private func configureTabBarAppearance() {

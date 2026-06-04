@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct BookmarksView: View {
+    var switchToBrowser: () -> Void
+
     @State private var bookmarks: [Bookmark] = []
     @State private var searchText = ""
     @State private var showAddSheet = false
@@ -84,6 +86,7 @@ struct BookmarksView: View {
                                 object: nil,
                                 userInfo: ["url": url]
                             )
+                            switchToBrowser()
                         }
                     }
                     .swipeActions(edge: .trailing) {

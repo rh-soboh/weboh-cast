@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct QueueView: View {
-    @StateObject private var playerVM = PlayerViewModel()
+    @ObservedObject var playerVM: PlayerViewModel
     @State private var showPlayer = false
     @State private var showSavePlaylist = false
     @State private var playlists: [Playlist] = []
@@ -50,7 +50,6 @@ struct QueueView: View {
             }
             .onAppear {
                 playlists = persistence.loadPlaylists()
-                playerVM.queue = persistence.loadQueue()
             }
         }
     }

@@ -22,7 +22,7 @@ final class BrowserViewModel: ObservableObject {
     }
 
     var homeURL: URL {
-        URL(string: settings.searchEngine.homeURL)!
+        URL(string: settings.searchEngine.homeURL) ?? URL(string: "https://www.google.com")!
     }
 
     init() {
@@ -63,11 +63,13 @@ final class BrowserViewModel: ObservableObject {
         if let directURL = URL(string: trimmed), directURL.scheme != nil,
            trimmed.contains(".") || trimmed.hasPrefix("http") {
             url = directURL
-        } else if trimmed.contains(".") && !trimmed.contains(" ") {
-            url = URL(string: "https://\(trimmed)")!
+        } else if trimmed.contains(".") && !trimmed.contains(" "),
+                  let httpsURL = URL(string: "https://\(trimmed)") {
+            url = httpsURL
         } else {
             let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed
-            url = URL(string: "\(settings.searchEngine.searchURL)\(encoded)")!
+            guard let searchURL = URL(string: "\(settings.searchEngine.searchURL)\(encoded)") else { return }
+            url = searchURL
         }
 
         if tabs.indices.contains(activeTabIndex) {
@@ -130,6 +132,7 @@ final class BrowserViewModel: ObservableObject {
 
     func addBookmark() {
         guard let tab = activeTab, let url = tab.url else { return }
+        guard !isBookmarked() else { return }
         let bookmark = Bookmark(title: tab.title, url: url.absoluteString)
         persistence.addBookmark(bookmark)
     }

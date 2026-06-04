@@ -71,7 +71,14 @@ final class CastingManager: ObservableObject {
 
     func disconnect() {
         if let device = connectedDevice {
-            dlnaService.stop(device: device) { _, _ in }
+            switch device.castProtocol {
+            case .dlna:
+                dlnaService.stop(device: device) { _, _ in }
+            case .chromecast:
+                chromecastService.stop(on: device) { _, _ in }
+            case .airplay:
+                break
+            }
         }
         connectedDevice?.state = .available
         connectedDevice = nil
@@ -102,7 +109,7 @@ final class CastingManager: ObservableObject {
         case .airplay:
             break
         case .chromecast:
-            chromecastService.launchMedia(on: device, videoURL: video.url) { [weak self] success, error in
+            chromecastService.launchMedia(on: device, videoURL: video.url, title: video.title) { [weak self] success, error in
                 DispatchQueue.main.async {
                     if success {
                         self?.connectedDevice?.state = .playing
@@ -138,12 +145,20 @@ final class CastingManager: ObservableObject {
     }
 
     func stopCasting() {
-        guard let device = connectedDevice, device.castProtocol == .dlna else { return }
-        dlnaService.stop(device: device) { [weak self] _, _ in
+        guard let device = connectedDevice else { return }
+        let finish: (Bool, String?) -> Void = { [weak self] _, _ in
             DispatchQueue.main.async {
                 self?.connectedDevice?.state = .connected
                 self?.isCasting = false
             }
+        }
+        switch device.castProtocol {
+        case .dlna:
+            dlnaService.stop(device: device, completion: finish)
+        case .chromecast:
+            chromecastService.stop(on: device, completion: finish)
+        case .airplay:
+            finish(true, nil)
         }
     }
 

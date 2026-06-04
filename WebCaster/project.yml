@@ -47,9 +47,7 @@ targets:
         CFBundleName: WebCaster
         CFBundleShortVersionString: "1.0.0"
         CFBundleVersion: "1"
-        UILaunchScreen:
-          UIColorName: ""
-          UIImageName: ""
+        UILaunchScreen: {}
         NSLocalNetworkUsageDescription: "WebCaster needs access to your local network to discover casting devices like Chromecast, DLNA TVs, and AirPlay receivers."
         NSBonjourServices:
           - _googlecast._tcp
@@ -58,4 +56,3 @@ targets:
           - audio
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
-          UISceneConfigurations: {}

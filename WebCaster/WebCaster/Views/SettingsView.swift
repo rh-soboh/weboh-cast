@@ -94,6 +94,9 @@ struct SettingsView: View {
                 }
             }
             .tint(.wcOrange)
+            .onChange(of: settings.adBlockerEnabled) { newValue in
+                NotificationCenter.default.post(name: .init("WebViewReload"), object: nil)
+            }
 
             Toggle(isOn: $settings.blockWebRTC) {
                 HStack(spacing: 10) {
@@ -199,14 +202,14 @@ struct SettingsView: View {
             HStack {
                 Text("Version")
                 Spacer()
-                Text("1.0.0")
+                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
                     .foregroundColor(.wcTextSecondary)
             }
 
             HStack {
                 Text("Build")
                 Spacer()
-                Text("1")
+                Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1")
                     .foregroundColor(.wcTextSecondary)
             }
 

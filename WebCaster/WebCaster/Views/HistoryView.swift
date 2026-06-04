@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct HistoryView: View {
+    var switchToBrowser: () -> Void
+
     @State private var history: [HistoryEntry] = []
     @State private var searchText = ""
     @State private var showClearAlert = false
@@ -90,11 +92,13 @@ struct HistoryView: View {
                     ForEach(entries) { entry in
                         HistoryRow(entry: entry)
                             .onTapGesture {
+                                guard let url = URL(string: entry.url) else { return }
                                 NotificationCenter.default.post(
                                     name: .init("NavigateToURL"),
                                     object: nil,
-                                    userInfo: ["url": URL(string: entry.url)!]
+                                    userInfo: ["url": url]
                                 )
+                                switchToBrowser()
                             }
                     }
                     .onDelete { offsets in

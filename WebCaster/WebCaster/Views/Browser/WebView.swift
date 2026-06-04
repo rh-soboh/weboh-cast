@@ -61,10 +61,16 @@ struct WebView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // UserAgent changes
         let newUA = AppSettings.shared.effectiveUserAgent
         if webView.customUserAgent != newUA {
             webView.customUserAgent = newUA
+        }
+
+        if let tabURL = browserVM.activeTab?.url,
+           tabURL != webView.url,
+           context.coordinator.lastLoadedTabIndex != browserVM.activeTabIndex {
+            context.coordinator.lastLoadedTabIndex = browserVM.activeTabIndex
+            webView.load(URLRequest(url: tabURL))
         }
     }
 
@@ -72,6 +78,7 @@ struct WebView: UIViewRepresentable {
         var browserVM: BrowserViewModel
         var videoDetectorVM: VideoDetectorViewModel
         weak var webView: WKWebView?
+        var lastLoadedTabIndex: Int = 0
         private var progressObservation: NSKeyValueObservation?
         private var titleObservation: NSKeyValueObservation?
         private var urlObservation: NSKeyValueObservation?
@@ -139,6 +146,11 @@ struct WebView: UIViewRepresentable {
             ) { [weak self] _ in self?.webView?.reload() }
             notificationObservers.append(reload)
 
+            let stop = NotificationCenter.default.addObserver(
+                forName: .init("WebViewStopLoading"), object: nil, queue: .main
+            ) { [weak self] _ in self?.webView?.stopLoading() }
+            notificationObservers.append(stop)
+
             let clear = NotificationCenter.default.addObserver(
                 forName: .init("ClearBrowsingData"), object: nil, queue: .main
             ) { [weak self] _ in
@@ -147,7 +159,9 @@ struct WebView: UIViewRepresentable {
                 dataStore.fetchDataRecords(ofTypes: allTypes) { records in
                     dataStore.removeData(ofTypes: allTypes, for: records) { }
                 }
-                self?.webView?.load(URLRequest(url: URL(string: AppSettings.shared.searchEngine.homeURL)!))
+                if let homeURL = URL(string: AppSettings.shared.searchEngine.homeURL) {
+                    self?.webView?.load(URLRequest(url: homeURL))
+                }
             }
             notificationObservers.append(clear)
         }

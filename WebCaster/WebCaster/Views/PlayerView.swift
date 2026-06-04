@@ -16,14 +16,16 @@ struct PlayerView: View {
             Color.black.ignoresSafeArea()
 
             if let player = playerVM.player {
-                VideoPlayerLayer(player: player)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showControls.toggle()
-                        }
-                        resetControlsTimer()
+                VideoPlayerLayer(player: player) { playerLayer in
+                    playerVM.setupPiP(for: playerLayer)
+                }
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showControls.toggle()
                     }
+                    resetControlsTimer()
+                }
             }
 
             if playerVM.isBuffering {
@@ -117,7 +119,7 @@ struct PlayerView: View {
                     showSpeedPicker = true
                 }
                 Button("Picture in Picture", systemImage: "pip") {
-                    playerVM.pipEnabled.toggle()
+                    playerVM.togglePiP()
                 }
                 Divider()
                 Button(
@@ -284,10 +286,14 @@ struct PlayerView: View {
 
 struct VideoPlayerLayer: UIViewRepresentable {
     let player: AVPlayer
+    var onPlayerLayerReady: ((AVPlayerLayer) -> Void)?
 
     func makeUIView(context: Context) -> PlayerUIView {
         let view = PlayerUIView()
         view.player = player
+        if let playerLayer = view.layer as? AVPlayerLayer {
+            onPlayerLayerReady?(playerLayer)
+        }
         return view
     }
 

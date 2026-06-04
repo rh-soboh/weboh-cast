@@ -33,6 +33,7 @@ struct CastDevice: Identifiable, Codable, Hashable {
     var lastConnected: Date?
     var modelName: String?
     var manufacturer: String?
+    var controlURL: String?
 
     init(
         name: String,
@@ -40,7 +41,8 @@ struct CastDevice: Identifiable, Codable, Hashable {
         port: Int,
         castProtocol: CastProtocol,
         modelName: String? = nil,
-        manufacturer: String? = nil
+        manufacturer: String? = nil,
+        controlURL: String? = nil
     ) {
         self.id = UUID()
         self.name = name
@@ -51,6 +53,7 @@ struct CastDevice: Identifiable, Codable, Hashable {
         self.lastConnected = nil
         self.modelName = modelName
         self.manufacturer = manufacturer
+        self.controlURL = controlURL
     }
 
     var displayName: String {

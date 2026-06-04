@@ -3,8 +3,8 @@ import SwiftUI
 struct BrowserView: View {
     @StateObject private var browserVM = BrowserViewModel()
     @StateObject private var videoDetectorVM = VideoDetectorViewModel()
-    @StateObject private var playerVM = PlayerViewModel()
-    @StateObject private var castingVM = CastingViewModel()
+    @ObservedObject var playerVM: PlayerViewModel
+    @ObservedObject var castingVM: CastingViewModel
 
     @State private var showTabs = false
     @State private var showVideoList = false
@@ -21,6 +21,10 @@ struct BrowserView: View {
 
                 WebView(browserVM: browserVM, videoDetectorVM: videoDetectorVM)
                     .ignoresSafeArea(edges: .bottom)
+
+                if castingVM.isCasting, let device = castingVM.connectedDevice {
+                    nowCastingBar(device: device)
+                }
 
                 browserToolbar
             }
@@ -77,7 +81,83 @@ struct BrowserView: View {
                         }
                     }
             }
+            if let error = castingVM.error {
+                castErrorBanner(error)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
+    }
+
+    private func nowCastingBar(device: CastDevice) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "tv.fill")
+                .font(.system(size: 14))
+                .foregroundColor(.wcOrange)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Casting to \(device.name)")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.wcText)
+                    .lineLimit(1)
+                Text(device.state == .paused ? "Paused" : "Playing")
+                    .font(.system(size: 11))
+                    .foregroundColor(.wcTextSecondary)
+            }
+
+            Spacer()
+
+            if device.state == .paused {
+                Button(action: { castingVM.resumeCasting() }) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.wcOrange)
+                }
+            } else {
+                Button(action: { castingVM.pauseCasting() }) {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.wcOrange)
+                }
+            }
+
+            Button(action: { castingVM.stopCasting() }) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.wcTextSecondary)
+            }
+
+            Button(action: { castingVM.disconnect() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.red.opacity(0.8))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.wcSurface)
+    }
+
+    private func castErrorBanner(_ message: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.red)
+            Text(message)
+                .font(.system(size: 13))
+                .foregroundColor(.wcText)
+                .lineLimit(2)
+            Spacer()
+            Button(action: { castingVM.error = nil }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.wcTextSecondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.red.opacity(0.15))
+        .cornerRadius(12)
+        .padding(.horizontal, 12)
+        .padding(.top, 60)
     }
 
     private var browserToolbar: some View {

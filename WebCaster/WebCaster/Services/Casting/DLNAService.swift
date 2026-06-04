@@ -113,12 +113,21 @@ final class DLNAService: NSObject {
 
     // MARK: - Casting
 
+    private func avTransportURL(for device: CastDevice) -> String {
+        if let ctrl = device.controlURL {
+            if ctrl.hasPrefix("http") { return ctrl }
+            let path = ctrl.hasPrefix("/") ? ctrl : "/\(ctrl)"
+            return "http://\(device.host):\(device.port)\(path)"
+        }
+        return "http://\(device.host):\(device.port)/AVTransport/Control"
+    }
+
     func cast(video: DetectedVideo, to device: CastDevice, completion: @escaping (Bool, String?) -> Void) {
-        let avTransportURL = "http://\(device.host):\(device.port)/AVTransport/Control"
-        let setURIAction = buildSetAVTransportURIAction(videoURL: video.url)
+        let controlEndpoint = avTransportURL(for: device)
+        let setURIAction = buildSetAVTransportURIAction(videoURL: video.url, title: video.title)
 
         sendSOAPAction(
-            url: avTransportURL,
+            url: controlEndpoint,
             action: "SetAVTransportURI",
             serviceType: "urn:schemas-upnp-org:service:AVTransport:1",
             body: setURIAction
@@ -132,7 +141,7 @@ final class DLNAService: NSObject {
     }
 
     func play(device: CastDevice, completion: @escaping (Bool, String?) -> Void) {
-        let url = "http://\(device.host):\(device.port)/AVTransport/Control"
+        let url = avTransportURL(for: device)
         let body = """
         <u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
             <InstanceID>0</InstanceID>
@@ -143,7 +152,7 @@ final class DLNAService: NSObject {
     }
 
     func pause(device: CastDevice, completion: @escaping (Bool, String?) -> Void) {
-        let url = "http://\(device.host):\(device.port)/AVTransport/Control"
+        let url = avTransportURL(for: device)
         let body = """
         <u:Pause xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
             <InstanceID>0</InstanceID>
@@ -153,7 +162,7 @@ final class DLNAService: NSObject {
     }
 
     func stop(device: CastDevice, completion: @escaping (Bool, String?) -> Void) {
-        let url = "http://\(device.host):\(device.port)/AVTransport/Control"
+        let url = avTransportURL(for: device)
         let body = """
         <u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
             <InstanceID>0</InstanceID>
@@ -163,7 +172,7 @@ final class DLNAService: NSObject {
     }
 
     func seek(device: CastDevice, to position: String, completion: @escaping (Bool, String?) -> Void) {
-        let url = "http://\(device.host):\(device.port)/AVTransport/Control"
+        let url = avTransportURL(for: device)
         let body = """
         <u:Seek xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
             <InstanceID>0</InstanceID>
@@ -174,16 +183,21 @@ final class DLNAService: NSObject {
         sendSOAPAction(url: url, action: "Seek", serviceType: "urn:schemas-upnp-org:service:AVTransport:1", body: body, completion: completion)
     }
 
-    private func buildSetAVTransportURIAction(videoURL: String) -> String {
+    private func buildSetAVTransportURIAction(videoURL: String, title: String) -> String {
         let escapedURL = videoURL
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+        let escapedTitle = title
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+        let didl = "&lt;DIDL-Lite xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/&quot; xmlns:dc=&quot;http://purl.org/dc/elements/1.1/&quot; xmlns:upnp=&quot;urn:schemas-upnp-org:metadata-1-0/upnp/&quot;&gt;&lt;item id=&quot;0&quot; parentID=&quot;-1&quot; restricted=&quot;1&quot;&gt;&lt;dc:title&gt;\(escapedTitle)&lt;/dc:title&gt;&lt;upnp:class&gt;object.item.videoItem&lt;/upnp:class&gt;&lt;res protocolInfo=&quot;http-get:*:video/mp4:*&quot;&gt;\(escapedURL)&lt;/res&gt;&lt;/item&gt;&lt;/DIDL-Lite&gt;"
         return """
         <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
             <InstanceID>0</InstanceID>
             <CurrentURI>\(escapedURL)</CurrentURI>
-            <CurrentURIMetaData></CurrentURIMetaData>
+            <CurrentURIMetaData>\(didl)</CurrentURIMetaData>
         </u:SetAVTransportURI>
         """
     }
@@ -230,6 +244,10 @@ private class DLNADeviceParser: NSObject, XMLParserDelegate {
     private var friendlyName = ""
     private var modelName = ""
     private var manufacturer = ""
+    private var controlURL = ""
+    private var currentServiceType = ""
+    private var currentControlURL = ""
+    private var inService = false
 
     init(data: Data, host: String, port: Int) {
         self.data = data
@@ -249,20 +267,38 @@ private class DLNADeviceParser: NSObject, XMLParserDelegate {
             port: port,
             castProtocol: .dlna,
             modelName: modelName.isEmpty ? nil : modelName,
-            manufacturer: manufacturer.isEmpty ? nil : manufacturer
+            manufacturer: manufacturer.isEmpty ? nil : manufacturer,
+            controlURL: controlURL.isEmpty ? nil : controlURL
         )
     }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
         currentElement = elementName
+        if elementName == "service" {
+            inService = true
+            currentServiceType = ""
+            currentControlURL = ""
+        }
+    }
+
+    func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName: String?) {
+        if elementName == "service" && inService {
+            if currentServiceType.contains("AVTransport") && !currentControlURL.isEmpty {
+                controlURL = currentControlURL
+            }
+            inService = false
+        }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
         switch currentElement {
         case "friendlyName": friendlyName += trimmed
         case "modelName": modelName += trimmed
         case "manufacturer": manufacturer += trimmed
+        case "serviceType" where inService: currentServiceType += trimmed
+        case "controlURL" where inService: currentControlURL += trimmed
         default: break
         }
     }

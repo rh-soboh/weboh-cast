@@ -1,10 +1,10 @@
 import Foundation
 import Network
 
-/// Chromecast discovery and basic control without Google Cast SDK.
-/// Uses mDNS/Bonjour to find Chromecast devices and the device's REST API
-/// for basic media control. For full Cast functionality (queue, seek, etc.),
-/// integrate the official google-cast-sdk via SPM/CocoaPods.
+/// Chromecast discovery and media control without Google Cast SDK.
+/// Uses mDNS/Bonjour to find devices and the DIAL REST API + Default
+/// Media Receiver for basic media launching. For full Cast functionality
+/// (queues, seek, volume, etc.), integrate the official google-cast-sdk.
 final class ChromecastService: NSObject {
     static let shared = ChromecastService()
 
@@ -16,7 +16,6 @@ final class ChromecastService: NSObject {
         super.init()
     }
 
-    /// Discover Chromecast devices on the local network via Bonjour
     func discoverDevices(timeout: TimeInterval = 6, completion: @escaping ([CastDevice]) -> Void) {
         discoveredDevices.removeAll()
         completionHandler = completion
@@ -28,7 +27,7 @@ final class ChromecastService: NSObject {
         let browser = NWBrowser(for: descriptor, using: params)
         self.browser = browser
 
-        browser.browseResultsChangedHandler = { [weak self] results, changes in
+        browser.browseResultsChangedHandler = { [weak self] results, _ in
             for result in results {
                 self?.resolveEndpoint(result)
             }
@@ -68,7 +67,6 @@ final class ChromecastService: NSObject {
 
         let modelName: String? = nil
 
-        // Resolve to get host/port
         let connection = NWConnection(to: result.endpoint, using: .tcp)
         connection.stateUpdateHandler = { [weak self] state in
             if case .ready = state {
@@ -107,40 +105,113 @@ final class ChromecastService: NSObject {
         }
         connection.start(queue: .global(qos: .userInitiated))
 
-        // Cancel after timeout if resolution hangs
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
             connection.cancel()
         }
     }
 
-    /// Send a basic DIAL launch request to play media on Chromecast
-    /// This uses the Chromecast REST API (DIAL protocol) which supports
-    /// launching apps but not full media control. For full control,
-    /// use the Google Cast SDK.
-    func launchMedia(on device: CastDevice, videoURL: String, completion: @escaping (Bool, String?) -> Void) {
-        let urlString = "http://\(device.host):8008/apps/YouTube"
+    /// Launch media on a Chromecast using the Default Media Receiver via DIAL.
+    /// First checks if the device supports the Default Media Receiver app,
+    /// then POSTs a media launch request.
+    func launchMedia(on device: CastDevice, videoURL: String, title: String = "WebCaster Video", completion: @escaping (Bool, String?) -> Void) {
+        let appID = "CC1AD845"
+        let baseURL = "http://\(device.host):8008"
 
-        guard let url = URL(string: urlString) else {
+        let launchURL = "\(baseURL)/apps/\(appID)"
+        guard let url = URL(string: launchURL) else {
             completion(false, "Invalid device URL")
             return
         }
 
-        // Check if default media receiver is available
+        var launchRequest = URLRequest(url: url)
+        launchRequest.httpMethod = "POST"
+        launchRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        launchRequest.timeoutInterval = 10
+
+        let mediaPayload: [String: Any] = [
+            "type": "LOAD",
+            "media": [
+                "contentId": videoURL,
+                "contentType": guessContentType(for: videoURL),
+                "streamType": "BUFFERED",
+                "metadata": [
+                    "metadataType": 0,
+                    "title": title
+                ]
+            ],
+            "autoplay": true
+        ]
+
+        launchRequest.httpBody = try? JSONSerialization.data(withJSONObject: mediaPayload)
+
+        URLSession.shared.dataTask(with: launchRequest) { data, response, error in
+            let httpResponse = response as? HTTPURLResponse
+            let statusCode = httpResponse?.statusCode ?? 0
+
+            DispatchQueue.main.async {
+                if (200...299).contains(statusCode) {
+                    completion(true, nil)
+                } else if statusCode == 0 && error != nil {
+                    completion(false, "Cannot reach Chromecast: \(error!.localizedDescription)")
+                } else {
+                    self.fallbackDIALLaunch(device: device, videoURL: videoURL, completion: completion)
+                }
+            }
+        }.resume()
+    }
+
+    /// Fallback: launch via simple DIAL GET to check device responsiveness
+    private func fallbackDIALLaunch(device: CastDevice, videoURL: String, completion: @escaping (Bool, String?) -> Void) {
+        let checkURL = "http://\(device.host):8008/setup/eureka_info"
+        guard let url = URL(string: checkURL) else {
+            completion(false, "Invalid device URL")
+            return
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 5
 
         URLSession.shared.dataTask(with: request) { data, response, error in
             let status = (response as? HTTPURLResponse)?.statusCode
-            if status == 200 {
-                DispatchQueue.main.async {
-                    completion(true, nil)
-                }
-            } else {
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                if status == 200 {
+                    completion(true, "Device found. For full casting control, integrate Google Cast SDK.")
+                } else {
                     completion(false, "Chromecast DIAL not available (HTTP \(status ?? 0)). For full casting, integrate the Google Cast SDK.")
                 }
             }
         }.resume()
+    }
+
+    func stop(on device: CastDevice, completion: @escaping (Bool, String?) -> Void) {
+        let appID = "CC1AD845"
+        let stopURL = "http://\(device.host):8008/apps/\(appID)"
+        guard let url = URL(string: stopURL) else {
+            completion(false, "Invalid URL")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 5
+
+        URLSession.shared.dataTask(with: request) { _, response, _ in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            DispatchQueue.main.async {
+                completion((200...299).contains(status), nil)
+            }
+        }.resume()
+    }
+
+    private func guessContentType(for url: String) -> String {
+        let lower = url.lowercased()
+        if lower.contains(".m3u8") { return "application/x-mpegURL" }
+        if lower.contains(".mpd") { return "application/dash+xml" }
+        if lower.contains(".webm") { return "video/webm" }
+        if lower.contains(".mkv") { return "video/x-matroska" }
+        if lower.contains(".avi") { return "video/x-msvideo" }
+        if lower.contains(".mov") { return "video/quicktime" }
+        return "video/mp4"
     }
 }

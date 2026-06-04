@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AVKit
 import Combine
 
 final class PlayerViewModel: ObservableObject {
@@ -11,6 +12,7 @@ final class PlayerViewModel: ObservableObject {
     @Published var error: String?
     @Published var currentVideo: DetectedVideo?
     @Published var pipEnabled = false
+    @Published var pipActive = false
 
     @Published var queue: [PlaylistItem] = []
     @Published var currentQueueIndex: Int = 0
@@ -21,6 +23,7 @@ final class PlayerViewModel: ObservableObject {
     @Published var subtitleURL: String = ""
 
     var player: AVPlayer?
+    var pipController: AVPictureInPictureController?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
     private let persistence = PersistenceController.shared
@@ -155,12 +158,28 @@ final class PlayerViewModel: ObservableObject {
         persistence.saveQueue(queue)
     }
 
+    func togglePiP() {
+        guard let pip = pipController else { return }
+        if pip.isPictureInPictureActive {
+            pip.stopPictureInPicture()
+        } else {
+            pip.startPictureInPicture()
+        }
+    }
+
+    func setupPiP(for playerLayer: AVPlayerLayer) {
+        guard AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        pipController = AVPictureInPictureController(playerLayer: playerLayer)
+        pipController?.canStartPictureInPictureAutomaticallyFromInline = true
+    }
+
     func cleanup() {
         savePosition()
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
             timeObserver = nil
         }
+        pipController = nil
         player?.pause()
         player = nil
         isPlaying = false
